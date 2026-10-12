@@ -1,24 +1,23 @@
-# 《云计算技术》实验五：Chubby 类开源项目分析与 Paxos 协议实现
+# IoT Exp05: Paxos Distributed Consensus Implementation & Docker Deployment
 
-## 一、 实验概述
-本实验参考 **etcd** (https://github.com/etcd-io/etcd) 的架构思想，使用 Python 从零手写实现一套轻量级的 Paxos 共识协议原型。系统支持 Prepare/Promise、Accept/Accepted、多数派确认、超时重试以及节点崩溃恢复机制，并通过自定义 TCP 报文在多节点间进行通信。
+本项目是《云计算技术》课程实验五的实现，旨在通过 Python 从零实现一个基础的 **Paxos 分布式共识协议**，并通过 **Docker 容器化** 模拟分布式集群环境，验证分布式系统中的安全性（Safety）与共识达成机制。
 
-## 二、 项目目录结构
-- 
-ode/：Paxos 节点核心逻辑、状态机及网络服务
-- client/：客户端请求发送与集群交互模块
-- common/：自定义 TCP 报文编码/解码、日志及配置管理
-- 	ests/：单元测试与集成测试脚本
-- screenshots/：实验过程与结果截图
-- docker-compose.yml：多节点本地容器编排配置
-- equirements.txt：项目依赖声明
+---
 
-## 三、 运行与验证
-详见后续各阶段更新。
+## 📂 项目目录结构
 
-## 四、 实验截图
-| 截图说明 | 文件路径 |
-| :--- | :--- |
-| Docker 集群启动状态 | screenshots/docker_cluster_running.png |
-| Paxos 共识达成与日志复制 | screenshots/paxos_consensus.png |
-| 节点故障与崩溃恢复 | screenshots/node_recovery.png |
+* `client/` - 客户端脚本，用于向集群节点发起提案（Propose）。
+* `node/` - Paxos 节点核心逻辑（包含 Prepare、Promise、Accept、Accepted 两阶段共识算法与 TCP 网络通信）。
+* `common/` - 公共工具与消息定义。
+* `data/` - 节点运行状态持久化目录（存储 `node_1_state.json` 等状态文件）。
+* `Dockerfile` - 容器镜像构建文件。
+* `docker-compose.yml` - 3 节点分布式集群编排配置（支持网络互联与端口映射 8001-8003）。
+
+---
+
+## 🚀 快速开始 / 运行指南
+
+### 1. Docker 容器化集群部署
+在项目根目录下执行以下命令，启动 3 个 Paxos 节点：
+```bash
+docker compose up

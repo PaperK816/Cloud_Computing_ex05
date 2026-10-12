@@ -1,0 +1,12 @@
+# Python 字节码缓存
+__pycache__/
+*.py[cod]
+*.class
+
+# 运行时的临时数据或状态
+# data/
+
+# IDE 配置文件
+.vscode/
+.idea/
+venv/
