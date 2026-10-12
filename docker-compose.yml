@@ -4,7 +4,7 @@ services:
   node1:
     build: .
     container_name: paxos_node1
-    command: python -u node/server.py --id 1 --port 8001 --peers paxos_node2:8002,paxos_node3:8003
+    command: python -u node/server.py --id 1 --host 0.0.0.0 --port 8001 --peers paxos_node2:8002,paxos_node3:8003
     ports:
       - "8001:8001"
     volumes:
@@ -15,7 +15,7 @@ services:
   node2:
     build: .
     container_name: paxos_node2
-    command: python -u node/server.py --id 2 --port 8002 --peers paxos_node1:8001,paxos_node3:8003
+    command: python -u node/server.py --id 2 --host 0.0.0.0 --port 8002 --peers paxos_node1:8001,paxos_node3:8003
     ports:
       - "8002:8002"
     volumes:
@@ -26,7 +26,7 @@ services:
   node3:
     build: .
     container_name: paxos_node3
-    command: python -u node/server.py --id 3 --port 8003 --peers paxos_node1:8001,paxos_node2:8002
+    command: python -u node/server.py --id 3 --host 0.0.0.0 --port 8003 --peers paxos_node1:8001,paxos_node2:8002
     ports:
       - "8003:8003"
     volumes:
@@ -36,11 +36,8 @@ services:
 
 volumes:
   node1_data:
-    key: null
   node2_data:
-    key: null
   node3_data:
-    key: null
 
 networks:
   paxos-net:
