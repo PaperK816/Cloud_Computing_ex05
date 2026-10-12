@@ -70,6 +70,9 @@ class PaxosNode:
                 return self._handle_prepare(msg)
             elif m_type == "ACCEPT":
                 return self._handle_accept(msg)
+            elif m_type == "CLIENT_PROPOSE":
+                success = self.propose(msg.get("value"))
+                return {"status": "SUCCESS" if success else "FAILED", "node_id": self.node_id}
             elif m_type == "LEARN":
                 return self._handle_learn(msg)
             else:
@@ -271,3 +274,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         node.running = False
         print("Node stopped.")
+
+
