@@ -2,9 +2,10 @@
 __pycache__/
 *.py[cod]
 *.class
+*$py.class
 
 # 运行时的临时数据或状态
-# data/
+data/
 
 # IDE 配置文件
 .vscode/

@@ -9,9 +9,10 @@
 * `client/` - 客户端脚本，用于向集群节点发起提案（Propose）。
 * `node/` - Paxos 节点核心逻辑（包含 Prepare、Promise、Accept、Accepted 两阶段共识算法与 TCP 网络通信）。
 * `common/` - 公共工具与消息定义。
-* `data/` - 节点运行状态持久化目录（存储 `node_1_state.json` 等状态文件）。
 * `Dockerfile` - 容器镜像构建文件。
 * `docker-compose.yml` - 3 节点分布式集群编排配置（支持网络互联与端口映射 8001-8003）。
+
+*(注：本地运行时会自动生成 `data/` 目录用于持久化存储节点状态与 JSON 实验证据，该目录已通过 `.gitignore` 忽略，不纳入版本控制)*
 
 ---
 
