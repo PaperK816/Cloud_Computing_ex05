@@ -2,10 +2,10 @@ import json
 import struct
 
 class MessageProtocol:
-    \"\"\"
+    """
     自定义 TCP 报文协议：
     使用 4 字节大端长度前缀 + JSON 负载，保证 TCP 粘包/拆包处理正确。
-    \"\"\"
+    """
     
     @staticmethod
     def encode(msg_dict: dict) -> bytes:
@@ -15,9 +15,6 @@ class MessageProtocol:
 
     @staticmethod
     def decode_stream(reader):
-        \"\"\"
-        从流中读取一个完整报文
-        \"\"\"
         header = reader.read(4)
         if not header or len(header) < 4:
             return None

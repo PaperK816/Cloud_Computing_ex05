@@ -5,7 +5,6 @@ import argparse
 import sys
 import os
 
-# 确保能导入 common 和 node
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.protocol import MessageProtocol
@@ -16,21 +15,13 @@ class PaxosNode:
         self.node_id = node_id
         self.host = host
         self.port = port
-        self.peers = peers  # list of (host, port)
-        
+        self.peers = peers
         self.storage = Storage(node_id)
-        
-        # Proposer 状态
-        self.current_round = 0  # 保证 proposal id 递增且唯一: (seq, node_id)
+        self.current_round = 0
         self.lock = threading.Lock()
-        
-        # 运行状态
         self.running = True
-        
-        print(f"[Node {self.node_id}] Initialized with storage: promised={self.storage.promised_id}, accepted={self.storage.accepted_id}")
 
     def start(self):
-        # 启动 TCP 监听线程
         server_thread = threading.Thread(target=self._server_loop, daemon=True)
         server_thread.start()
         print(f"[Node {self.node_id}] TCP server listening on {self.host}:{self.port}")
@@ -48,7 +39,6 @@ class PaxosNode:
             except Exception as e:
                 if not self.running:
                     break
-                print(f"[Node {self.node_id}] Accept error: {e}")
 
     def _handle_connection(self, conn):
         try:
@@ -79,8 +69,7 @@ class PaxosNode:
                 return {"status": "ERROR", "reason": "Unknown message type"}
 
     def _handle_prepare(self, msg: dict) -> dict:
-        proposal_id = tuple(msg.get("proposal_id")) # [seq, node_id]
-        # 比较 proposal_id: 先比 seq，再比 node_id
+        proposal_id = tuple(msg.get("proposal_id"))
         if self.storage.promised_id is None or proposal_id > tuple(self.storage.promised_id):
             self.storage.update_promise(proposal_id)
             return {
@@ -132,16 +121,12 @@ class PaxosNode:
             return None
 
     def propose(self, value) -> bool:
-        \"\"\"
-        作为 Proposer 发起一次 Paxos 共识过程
-        \"\"\"
         with self.lock:
             self.current_round += 1
             proposal_id = [self.current_round, self.node_id]
         
         print(f"[Node {self.node_id}] Starting Paxos proposal {proposal_id} for value: {value}")
         
-        # Phase 1: Prepare
         prepare_msg = {
             "type": "PREPARE",
             "proposal_id": proposal_id
@@ -151,10 +136,9 @@ class PaxosNode:
         accepted_id_highest = None
         highest_v = value
         
-        total_nodes = len(self.peers) + 1  # 包括自己
+        total_nodes = len(self.peers) + 1
         quorum = total_nodes // 2 + 1
         
-        # 统计自己的票
         with self.lock:
             if self.storage.promised_id is None or tuple(proposal_id) >= tuple(self.storage.promised_id):
                 self.storage.update_promise(proposal_id)
@@ -163,7 +147,6 @@ class PaxosNode:
                     accepted_id_highest = self.storage.accepted_id
                     highest_v = self.storage.accepted_value
 
-        # 向其他节点并发发送 Prepare
         results = []
         threads = []
         
@@ -191,10 +174,8 @@ class PaxosNode:
                     
         print(f"[Node {self.node_id}] Prepare phase completed. Promises: {promises}/{quorum}")
         if promises < quorum:
-            print(f"[Node {self.node_id}] Prepare phase failed: quorum not reached.")
             return False
             
-        # Phase 2: Accept
         proposal_value = highest_v
         accept_msg = {
             "type": "ACCEPT",
@@ -231,10 +212,8 @@ class PaxosNode:
             
         print(f"[Node {self.node_id}] Accept phase completed. Accepts: {accepts}/{quorum}")
         if accepts < quorum:
-            print(f"[Node {self.node_id}] Accept phase failed: quorum not reached.")
             return False
             
-        # Phase 3: Learn
         learn_msg = {
             "type": "LEARN",
             "proposal_id": proposal_id,
@@ -242,11 +221,9 @@ class PaxosNode:
         }
         print(f"[Node {self.node_id}] Consensus reached! Broadcasting LEARN for value: {proposal_value}")
         
-        # 广播 Learn
         for peer in self.peers:
             threading.Thread(target=self.send_rpc, args=(peer[0], peer[1], learn_msg), daemon=True).start()
             
-        # 自己也 Learn
         self._handle_learn(learn_msg)
         return True
 
@@ -255,7 +232,7 @@ if __name__ == "__main__":
     parser.add_argument("--id", type=int, required=True)
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--peers", type=str, default="")  # format: host1:port1,host2:port2
+    parser.add_argument("--peers", type=str, default="")
     args = parser.parse_args()
     
     peers = []
@@ -267,12 +244,9 @@ if __name__ == "__main__":
     node = PaxosNode(args.id, args.host, args.port, peers)
     node.start()
     
-    # 保持主线程运行
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         node.running = False
         print("Node stopped.")
-
-

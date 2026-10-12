@@ -2,11 +2,6 @@ import json
 import os
 
 class Storage:
-    \"\"\"
-    Acceptor 状态持久化存储：
-    保存 promised_id, accepted_id, accepted_value 到本地 JSON 文件，
-    满足实验要求的节点崩溃恢复机制。
-    \"\"\"
     def __init__(self, node_id: int, data_dir: str = "data"):
         self.node_id = node_id
         self.data_dir = data_dir
@@ -24,15 +19,14 @@ class Storage:
                     self.accepted_id = data.get("accepted_id", None)
                     self.accepted_value = data.get("accepted_value", None)
             except Exception as e:
-                print(f"[Storage] Load error: {e}, resetting state.")
                 self._reset()
         else:
             self._reset()
 
     def _reset(self):
-        self.promised_id = None      # [round, node_id] 或 None
-        self.accepted_id = None      # [round, node_id] 或 None
-        self.accepted_value = None   # 任意提案值
+        self.promised_id = None
+        self.accepted_id = None
+        self.accepted_value = None
 
     def save(self):
         data = {
