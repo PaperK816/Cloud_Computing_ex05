@@ -1,5 +1,6 @@
 import json
 import struct
+import socket
 
 class MessageProtocol:
     """
@@ -16,29 +17,31 @@ class MessageProtocol:
 
     @staticmethod
     def _read_exact(stream, n: int) -> bytes:
-        """从 stream (socket 或 file object) 中精确读取 n 个字节"""
         if hasattr(stream, "recv"):
-            # socket 对象
             data = b""
             while len(data) < n:
                 packet = stream.recv(n - len(data))
                 if not packet:
-                    break
+                    raise ConnectionError("Socket connection closed prematurely")
                 data += packet
             return data
         elif hasattr(stream, "read"):
-            # 文件流 / file-like 对象
             return stream.read(n)
         else:
             raise TypeError("Stream must be a socket or file-like object")
 
     @staticmethod
     def decode_stream(stream):
-        header = MessageProtocol._read_exact(stream, 4)
-        if not header or len(header) < 4:
+        try:
+            header = MessageProtocol._read_exact(stream, 4)
+            if not header or len(header) < 4:
+                return None
+            length = struct.unpack('!I', header)[0]
+            data = MessageProtocol._read_exact(stream, length)
+            if not data or len(data) < length:
+                return None
+            return json.loads(data.decode('utf-8'))
+        except socket.timeout:
             return None
-        length = struct.unpack('!I', header)[0]
-        data = MessageProtocol._read_exact(stream, length)
-        if not data or len(data) < length:
+        except Exception as e:
             return None
-        return json.loads(data.decode('utf-8'))

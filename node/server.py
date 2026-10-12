@@ -15,7 +15,7 @@ class PaxosNode:
         self.node_id = node_id
         self.host = host
         self.port = port
-        self.peers = peers
+        self.peers = peers  # list of (host, port)
         self.storage = Storage(node_id)
         self.current_round = 0
         self.lock = threading.Lock()
@@ -39,11 +39,13 @@ class PaxosNode:
             except Exception as e:
                 if not self.running:
                     break
+                print(f"[Node {self.node_id}] Accept error: {e}")
 
     def _handle_connection(self, conn):
         try:
+            conn.settimeout(15.0)
             with conn:
-                while True:
+                while self.running:
                     msg = MessageProtocol.decode_stream(conn)
                     if not msg:
                         break
@@ -51,27 +53,35 @@ class PaxosNode:
                     if response:
                         conn.sendall(MessageProtocol.encode(response))
         except Exception as e:
+            # 捕获连接异常，避免线程异常终止
             pass
 
     def _process_message(self, msg: dict) -> dict:
         m_type = msg.get("type")
-        with self.lock:
-            if m_type == "PREPARE":
+        # 注意：不要在持有 self.lock 的情况下调用 self.propose()，
+        # 因为 propose() 内部也会获取 self.lock，会导致死锁！
+        if m_type == "PREPARE":
+            with self.lock:
                 return self._handle_prepare(msg)
-            elif m_type == "ACCEPT":
+        elif m_type == "ACCEPT":
+            with self.lock:
                 return self._handle_accept(msg)
-            elif m_type == "CLIENT_PROPOSE":
-                success = self.propose(msg.get("value"))
-                return {"status": "SUCCESS" if success else "FAILED", "node_id": self.node_id}
-            elif m_type == "LEARN":
+        elif m_type == "CLIENT_PROPOSE":
+            value = msg.get("value")
+            print(f"[Node {self.node_id}] Received client proposal: {value}")
+            success = self.propose(value)
+            return {"status": "SUCCESS" if success else "FAILED", "node_id": self.node_id, "value": value}
+        elif m_type == "LEARN":
+            with self.lock:
                 return self._handle_learn(msg)
-            else:
-                return {"status": "ERROR", "reason": "Unknown message type"}
+        else:
+            return {"status": "ERROR", "reason": f"Unknown message type: {m_type}"}
 
     def _handle_prepare(self, msg: dict) -> dict:
         proposal_id = tuple(msg.get("proposal_id"))
         if self.storage.promised_id is None or proposal_id > tuple(self.storage.promised_id):
             self.storage.update_promise(proposal_id)
+            print(f"[Node {self.node_id}] PROMISED proposal {proposal_id}")
             return {
                 "status": "PROMISE",
                 "node_id": self.node_id,
@@ -80,6 +90,7 @@ class PaxosNode:
                 "accepted_value": self.storage.accepted_value
             }
         else:
+            print(f"[Node {self.node_id}] REJECTED PREPARE {proposal_id}, already promised to {self.storage.promised_id}")
             return {
                 "status": "REJECT",
                 "node_id": self.node_id,
@@ -93,12 +104,14 @@ class PaxosNode:
         if self.storage.promised_id is None or proposal_id >= tuple(self.storage.promised_id):
             self.storage.update_promise(proposal_id)
             self.storage.update_accepted(proposal_id, value)
+            print(f"[Node {self.node_id}] ACCEPTED proposal {proposal_id} with value {value}")
             return {
                 "status": "ACCEPTED",
                 "node_id": self.node_id,
                 "proposal_id": proposal_id
             }
         else:
+            print(f"[Node {self.node_id}] REJECTED ACCEPT {proposal_id}, promised to {self.storage.promised_id}")
             return {
                 "status": "REJECT",
                 "node_id": self.node_id,
@@ -111,13 +124,15 @@ class PaxosNode:
         print(f"[Node {self.node_id}] LEARNED consensus value: {value} at proposal {proposal_id}")
         return {"status": "SUCCESS"}
 
-    def send_rpc(self, host, port, msg, timeout=2.0):
+    def send_rpc(self, host, port, msg, timeout=3.0):
         try:
             with socket.create_connection((host, port), timeout=timeout) as sock:
+                sock.settimeout(timeout)
                 sock.sendall(MessageProtocol.encode(msg))
                 resp = MessageProtocol.decode_stream(sock)
                 return resp
         except Exception as e:
+            print(f"[Node {self.node_id}] RPC to {host}:{port} failed: {e}")
             return None
 
     def propose(self, value) -> bool:
@@ -125,8 +140,12 @@ class PaxosNode:
             self.current_round += 1
             proposal_id = [self.current_round, self.node_id]
         
-        print(f"[Node {self.node_id}] Starting Paxos proposal {proposal_id} for value: {value}")
+        print(f"[Node {self.node_id}] === Starting Paxos Propose Round {self.current_round} with proposal_id {proposal_id} for value: {value} ===")
         
+        total_nodes = len(self.peers) + 1
+        quorum = total_nodes // 2 + 1
+        
+        # ================= Phase 1: Prepare =================
         prepare_msg = {
             "type": "PREPARE",
             "proposal_id": proposal_id
@@ -136,9 +155,7 @@ class PaxosNode:
         accepted_id_highest = None
         highest_v = value
         
-        total_nodes = len(self.peers) + 1
-        quorum = total_nodes // 2 + 1
-        
+        # 统计自己的一票
         with self.lock:
             if self.storage.promised_id is None or tuple(proposal_id) >= tuple(self.storage.promised_id):
                 self.storage.update_promise(proposal_id)
@@ -155,6 +172,8 @@ class PaxosNode:
             resp = self.send_rpc(p_host, p_port, prepare_msg)
             if resp and resp.get("status") == "PROMISE":
                 results.append(resp)
+            else:
+                print(f"[Node {self.node_id}] Peer {p_host}:{p_port} failed to PROMISE, resp: {resp}")
 
         for peer in self.peers:
             t = threading.Thread(target=query_peer, args=(peer,))
@@ -162,7 +181,7 @@ class PaxosNode:
             t.start()
             
         for t in threads:
-            t.join(timeout=3.0)
+            t.join(timeout=4.0)
             
         for resp in results:
             promises += 1
@@ -172,10 +191,12 @@ class PaxosNode:
                     accepted_id_highest = acc_id
                     highest_v = resp.get("accepted_value")
                     
-        print(f"[Node {self.node_id}] Prepare phase completed. Promises: {promises}/{quorum}")
+        print(f"[Node {self.node_id}] [Prepare Phase] Promises collected: {promises}/{quorum} (Required)")
         if promises < quorum:
+            print(f"[Node {self.node_id}] [Prepare Phase] FAILED: Quorum not reached ({promises} < {quorum})")
             return False
             
+        # ================= Phase 2: Accept =================
         proposal_value = highest_v
         accept_msg = {
             "type": "ACCEPT",
@@ -198,6 +219,8 @@ class PaxosNode:
             resp = self.send_rpc(p_host, p_port, accept_msg)
             if resp and resp.get("status") == "ACCEPTED":
                 accept_results.append(resp)
+            else:
+                print(f"[Node {self.node_id}] Peer {p_host}:{p_port} failed to ACCEPT, resp: {resp}")
 
         for peer in self.peers:
             t = threading.Thread(target=send_accept, args=(peer,))
@@ -205,21 +228,23 @@ class PaxosNode:
             t.start()
             
         for t in accept_threads:
-            t.join(timeout=3.0)
+            t.join(timeout=4.0)
             
         for resp in accept_results:
             accepts += 1
             
-        print(f"[Node {self.node_id}] Accept phase completed. Accepts: {accepts}/{quorum}")
+        print(f"[Node {self.node_id}] [Accept Phase] Accepts collected: {accepts}/{quorum} (Required)")
         if accepts < quorum:
+            print(f"[Node {self.node_id}] [Accept Phase] FAILED: Quorum not reached ({accepts} < {quorum})")
             return False
             
+        # ================= Phase 3: Learn =================
         learn_msg = {
             "type": "LEARN",
             "proposal_id": proposal_id,
             "value": proposal_value
         }
-        print(f"[Node {self.node_id}] Consensus reached! Broadcasting LEARN for value: {proposal_value}")
+        print(f"[Node {self.node_id}] [Learn Phase] Consensus reached! Broadcasting LEARN for value: {proposal_value}")
         
         for peer in self.peers:
             threading.Thread(target=self.send_rpc, args=(peer[0], peer[1], learn_msg), daemon=True).start()
@@ -250,4 +275,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         node.running = False
         print("Node stopped.")
-
