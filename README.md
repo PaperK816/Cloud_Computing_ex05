@@ -1,4 +1,4 @@
-# IoT Exp05: Paxos Distributed Consensus Implementation & Docker Deployment
+# Cloud Computing Exp05: Paxos Distributed Consensus Implementation & Docker Deployment
 
 本项目是《云计算技术》课程实验五的实现，旨在通过 Python 从零实现一个基础的 **Paxos 分布式共识协议**，并通过 **Docker 容器化** 模拟分布式集群环境，验证分布式系统中的安全性（Safety）与共识达成机制。
 
